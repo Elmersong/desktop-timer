@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Desktop Timer</title>
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, #1e1e2f, #111);
+    color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    user-select: none;
+    overflow: hidden;
+}
+
+/* 顶部拖拽区域 */
+#header {
+    height: 20px;
+    -webkit-app-region: drag;
+}
+
+/* 关闭按钮 */
+#close {
+    -webkit-app-region: no-drag;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    cursor: pointer;
+    display: none;
+    font-size: 16px;
+    z-index: 10;
+}
+
+/* 主容器 */
+#content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    justify-content: center; /* 垂直居中 */
+    align-items: center;
+    position: relative;
+}
+
+/* 倒计时数字 */
+#time {
+    font-size: 35px;
+    letter-spacing: 2px;
+    z-index: 1;
+    margin-bottom: 10px; /* 与设置面板间距 */
+    margin-top: -25px;
+}
+
+/* 设置面板 */
+#settings {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 2;
+}
+
+/* 每行：标签+输入框 */
+.input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-row label {
+    min-width: 80px;
+    font-size: 14px;
+    text-align: right;
+}
+
+.input-row input {
+    width: 60px;
+    text-align: center;
+    border-radius: 6px;
+    border: 1px solid #555;
+    background: #222;
+    color: #fff;
+    padding: 4px;
+    font-size: 14px;
+}
+
+/* 开始按钮 */
+button {
+    width: 160px;
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+    background: #4a90e2;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+button:hover { background: #6aa0f2; }
+</style>
+</head>
+<body>
+<div id="header"><span id="close">✕</span></div>
+
+<div id="content">
+    <div id="time">00:00</div>
+    <div id="settings">
+        <div class="input-row">
+            <label for="focusMin">专注分钟</label>
+            <input id="focusMin" type="number" value="4"/>
+        </div>
+        <div class="input-row">
+            <label for="restMin">休息分钟</label>
+            <input id="restMin" type="number" value="4"/>
+        </div>
+        <div class="input-row">
+            <label for="totalMin">总周期分钟</label>
+            <input id="totalMin" type="number" value="30"/>
+        </div>
+        <button id="start">开始</button>
+    </div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+
+const closeBtn = document.getElementById('close');
+const startBtn = document.getElementById('start');
+const settingsDiv = document.getElementById('settings');
+const contentDiv = document.getElementById('content');
+const timeDiv = document.getElementById('time');
+
+let timer = null;
+let timerRunning = false;
+let paused = false;
+let state = 'focus';
+let remaining = 0;
+let totalRemaining = 0;
+let focusTime = 0;
+let restTime = 0;
+let totalTime = 0;
+
+// 当前周期数值
+let currentFocus = 4;
+let currentRest = 4;
+let currentTotal = 30;
+
+closeBtn.onclick = () => ipcRenderer.send('close-window');
+
+// 鼠标悬浮显示所有控制（包括关闭按钮和设置面板）
+let hideTimeout = null;
+contentDiv.addEventListener('mouseenter', () => {
+    closeBtn.style.display='inline';
+    settingsDiv.style.display='flex';
+    // 更新输入框显示当前周期数值
+    document.getElementById('focusMin').value = currentFocus;
+    document.getElementById('restMin').value = currentRest;
+    document.getElementById('totalMin').value = Math.ceil(totalRemaining/60) || currentTotal;
+});
+
+// 鼠标离开整个窗口隐藏控制（保证可点击关闭按钮）
+contentDiv.addEventListener('mouseleave', () => {
+    if(timerRunning && !paused){
+        hideTimeout = setTimeout(()=>{
+            closeBtn.style.display='none';
+            settingsDiv.style.display='none';
+        }, 200); 
+    }
+});
+
+closeBtn.addEventListener('mouseenter', () => {
+    if(hideTimeout) clearTimeout(hideTimeout);
+});
+
+// 双击暂停/继续
+contentDiv.ondblclick = () => {
+    if(!timerRunning) return;
+    paused = !paused;
+    if(paused){
+        settingsDiv.style.display='flex';
+        closeBtn.style.display='inline';
+    } else {
+        settingsDiv.style.display='none';
+        closeBtn.style.display='none';
+    }
+};
+
+function updateDisplay(){
+    const m = String(Math.floor(remaining/60)).padStart(2,'0');
+    const s = String(remaining%60).padStart(2,'0');
+    timeDiv.innerText = `${m}:${s}`;
+}
+
+// 闪烁效果
+function flash(color, times=3){
+    let count = 0;
+    const interval = setInterval(()=>{
+        document.body.style.background = count%2===0 ? color : 'linear-gradient(120deg,#1e1e2f,#111)';
+        count++;
+        if(count >= times*2){ 
+            clearInterval(interval); 
+            document.body.style.background='linear-gradient(120deg,#1e1e2f,#111)'; 
+        }
+    }, 400);
+}
+
+// 播放提示音
+function playAlert(){
+    const audio = new Audio('alert.mp3');
+    audio.play();
+}
+
+function startTimer(){
+    focusTime = parseInt(document.getElementById('focusMin').value)*60;
+    restTime = parseInt(document.getElementById('restMin').value)*60;
+    totalTime = parseInt(document.getElementById('totalMin').value)*60;
+
+    // 保存当前周期数值
+    currentFocus = focusTime/60;
+    currentRest = restTime/60;
+    currentTotal = totalTime/60;
+
+    remaining = focusTime;
+    totalRemaining = totalTime;
+    state='focus';
+    paused=false;
+    timerRunning=true;
+
+    settingsDiv.style.display='none';
+    closeBtn.style.display='none';
+
+    updateDisplay();
+
+    if(timer) clearInterval(timer);
+
+    timer = setInterval(()=>{
+        if(paused) return;
+
+        remaining--;
+        totalRemaining--;
+        updateDisplay();
+
+        if(remaining <= 0){
+            if(state==='focus'){ 
+                state='rest'; 
+                remaining = restTime; 
+                flash('#2ecc71',3); 
+                playAlert(); 
+            } else { 
+                state='focus'; 
+                remaining = focusTime; 
+                flash('#3498db',3); 
+                playAlert(); 
+            }
+        }
+
+        if(totalRemaining <= 0){
+            clearInterval(timer);
+            timerRunning = false;
+            state='focus';
+            remaining=0;
+            totalRemaining=0;
+            updateDisplay();
+            flash('#f39c12',3); 
+            playAlert(); 
+            settingsDiv.style.display='flex';
+            closeBtn.style.display='inline';
+        }
+    },1000);
+}
+
+window.onload = () => {
+    startBtn.onclick = startTimer;
+    settingsDiv.style.display='flex';
+};
+</script>
+</body>
+</html>
