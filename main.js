@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
+
 let win;
 
 app.on('ready', () => {
@@ -19,6 +20,13 @@ app.on('ready', () => {
             contextIsolation: false
         }
     });
+
+    // 多桌面下尽量在所有桌面可见（在某些系统/版本下生效）
+    try {
+        win.setVisibleOnAllWorkspaces(true);
+    } catch (e) {
+        // 某些平台可能不支持，不影响正常使用
+    }
 
     win.loadFile('index.html');
 

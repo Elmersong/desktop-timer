@@ -22,7 +22,6 @@ html, body {
     -webkit-app-region: drag;
 }
 
-/* 关闭按钮 */
 #close {
     -webkit-app-region: no-drag;
     position: absolute;
@@ -34,62 +33,83 @@ html, body {
     z-index: 10;
 }
 
-/* 主容器 */
+/* 主区域整体上移（比上一版再上移一点） */
 #content {
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
-    justify-content: center; /* 垂直居中 */
+    justify-content: center;
     align-items: center;
     position: relative;
+    transform: translateY(-18px); /* 原 -12px → 现在 -18px */
 }
 
-/* 倒计时数字 */
+/* 当前阶段标签 */
+#phaseLabel {
+    font-size: 13px;
+    opacity: 0.85;
+    margin-bottom: 0px;
+    margin-top: -6px; /* 再往上贴一点 */
+}
+
+/* 时间数字 */
 #time {
-    font-size: 35px;
+    font-size: 56px;
     letter-spacing: 2px;
     z-index: 1;
-    margin-bottom: 10px; /* 与设置面板间距 */
-    margin-top: -25px;
+    margin-bottom: 6px;
+    margin-top: -4px;
+    transition: font-size 0.2s ease;
 }
 
-/* 设置面板 */
+/* 竖排显示（窗口极瘦时） */
+#time.vertical {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    line-height: 1.4;
+    letter-spacing: 0;
+}
+
 #settings {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     z-index: 2;
 }
 
-/* 每行：标签+输入框 */
 .input-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    font-size: 13px;
 }
 
 .input-row label {
     min-width: 80px;
-    font-size: 14px;
+    font-size: 13px;
     text-align: right;
 }
 
-.input-row input {
-    width: 60px;
+.time-input {
+    width: 42px;
     text-align: center;
     border-radius: 6px;
     border: 1px solid #555;
     background: #222;
     color: #fff;
-    padding: 4px;
-    font-size: 14px;
+    padding: 3px;
+    font-size: 13px;
 }
 
-/* 开始按钮 */
+.unit-label {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
 button {
-    width: 160px;
+    width: 180px;
     padding: 8px;
     border-radius: 6px;
     border: none;
@@ -97,187 +117,277 @@ button {
     color: #fff;
     font-weight: bold;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 15px;
     transition: all 0.2s;
+    margin-top: 4px;
+}
+button:hover { background: #6aa0f2; }
+
+/* 隐藏 Chrome / Edge / Safari 的数字输入框微调按钮 */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
-button:hover { background: #6aa0f2; }
+/* 隐藏 Firefox 的微调按钮 */
+input[type=number] {
+    -moz-appearance: textfield;
+}
+
+input[type=number] {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: inherit;
+    font-size: inherit;
+    text-align: center;
+    width: 40px;
+    -moz-appearance: textfield;
+    border-bottom: 1px solid #4a90e2;
+}
+
+/* 去掉 Chrome / Safari / Edge 数字箭头 */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+
+
+
 </style>
 </head>
 <body>
 <div id="header"><span id="close">✕</span></div>
 
 <div id="content">
+    <div id="phaseLabel">Settings</div>
     <div id="time">00:00</div>
     <div id="settings">
         <div class="input-row">
-            <label for="focusMin">专注分钟</label>
-            <input id="focusMin" type="number" value="4"/>
+            <label>Focus Time</label>
+            <input id="focusMin" class="time-input" type="number" value="4" min="0">
+            <span class="unit-label">M</span>
+            <input id="focusSec" class="time-input" type="number" value="0" min="0" max="59">
+            <span class="unit-label">S</span>
         </div>
         <div class="input-row">
-            <label for="restMin">休息分钟</label>
-            <input id="restMin" type="number" value="4"/>
+            <label>Relax Time</label>
+            <input id="restMin" class="time-input" type="number" value="4" min="0">
+            <span class="unit-label">M</span>
+            <input id="restSec" class="time-input" type="number" value="0" min="0" max="59">
+            <span class="unit-label">S</span>
         </div>
         <div class="input-row">
-            <label for="totalMin">总周期分钟</label>
-            <input id="totalMin" type="number" value="30"/>
+            <label>Total Time</label>
+            <input id="totalMin" class="time-input" type="number" value="30" min="0">
+            <span class="unit-label">M</span>
+            <input id="totalSec" class="time-input" type="number" value="0" min="0" max="59">
+            <span class="unit-label">S</span>
         </div>
-        <button id="start">开始</button>
+        <button id="start">Start</button>
     </div>
 </div>
 
 <script>
 const { ipcRenderer } = require('electron');
 
-const closeBtn = document.getElementById('close');
-const startBtn = document.getElementById('start');
+const closeBtn    = document.getElementById('close');
+const startBtn    = document.getElementById('start');
 const settingsDiv = document.getElementById('settings');
-const contentDiv = document.getElementById('content');
-const timeDiv = document.getElementById('time');
+const contentDiv  = document.getElementById('content');
+const timeDiv     = document.getElementById('time');
+const phaseLabel  = document.getElementById('phaseLabel');
 
-let timer = null;
-let timerRunning = false;
-let paused = false;
-let state = 'focus';
-let remaining = 0;
+let timer          = null;
+let timerRunning   = false;
+let paused         = false;
+let state          = 'idle';
+let remaining      = 0;
 let totalRemaining = 0;
-let focusTime = 0;
-let restTime = 0;
-let totalTime = 0;
+let focusTime      = 0;
+let restTime       = 0;
+let totalTime      = 0;
 
-// 当前周期数值
-let currentFocus = 4;
-let currentRest = 4;
-let currentTotal = 30;
+/* 统一的渐变背景 */
+const ACTIVE_BG = 'linear-gradient(135deg, #1b5e20, #0d47a1)';
 
 closeBtn.onclick = () => ipcRenderer.send('close-window');
 
-// 鼠标悬浮显示所有控制（包括关闭按钮和设置面板）
-let hideTimeout = null;
+function adjustTimeLayout() {
+    const ratio = window.innerHeight / window.innerWidth;
+    if (ratio > 2.0) {
+        timeDiv.classList.add('vertical');
+    } else {
+        timeDiv.classList.remove('vertical');
+    }
+}
+
 contentDiv.addEventListener('mouseenter', () => {
-    closeBtn.style.display='inline';
-    settingsDiv.style.display='flex';
-    // 更新输入框显示当前周期数值
-    document.getElementById('focusMin').value = currentFocus;
-    document.getElementById('restMin').value = currentRest;
-    document.getElementById('totalMin').value = Math.ceil(totalRemaining/60) || currentTotal;
+    closeBtn.style.display   = 'inline';
+    if (!timerRunning || paused) {
+        settingsDiv.style.display = 'flex';
+    }
 });
 
-// 鼠标离开整个窗口隐藏控制（保证可点击关闭按钮）
+let hideTimeout = null;
 contentDiv.addEventListener('mouseleave', () => {
-    if(timerRunning && !paused){
-        hideTimeout = setTimeout(()=>{
-            closeBtn.style.display='none';
-            settingsDiv.style.display='none';
-        }, 200); 
+    if (timerRunning && !paused) {
+        hideTimeout = setTimeout(() => {
+            closeBtn.style.display   = 'none';
+            settingsDiv.style.display = 'none';
+        }, 200);
     }
 });
 
 closeBtn.addEventListener('mouseenter', () => {
-    if(hideTimeout) clearTimeout(hideTimeout);
+    if (hideTimeout) clearTimeout(hideTimeout);
 });
 
-// 双击暂停/继续
-contentDiv.ondblclick = () => {
-    if(!timerRunning) return;
-    paused = !paused;
-    if(paused){
-        settingsDiv.style.display='flex';
-        closeBtn.style.display='inline';
-    } else {
-        settingsDiv.style.display='none';
-        closeBtn.style.display='none';
-    }
-};
+contentDiv.addEventListener('dblclick', (e) => {
+    const tag = e.target.tagName;
+    if (['INPUT','BUTTON','LABEL','SPAN'].includes(tag)) return;
 
-function updateDisplay(){
-    const m = String(Math.floor(remaining/60)).padStart(2,'0');
-    const s = String(remaining%60).padStart(2,'0');
-    timeDiv.innerText = `${m}:${s}`;
+    if (!timerRunning) return;
+
+    paused = !paused;
+    if (paused) {
+        settingsDiv.style.display = 'flex';
+        closeBtn.style.display    = 'inline';
+    } else {
+        settingsDiv.style.display = 'none';
+        closeBtn.style.display    = 'none';
+    }
+});
+
+function formatTime(sec) {
+    sec = Math.max(0, sec);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) {
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// 闪烁效果
-function flash(color, times=3){
+function updateDisplay() {
+    timeDiv.innerText = formatTime(remaining);
+}
+
+function applyPhaseBackground() {
+    if (state === 'focus') {
+        document.body.style.background = ACTIVE_BG;
+        phaseLabel.innerText = 'Focus';
+    } else if (state === 'rest') {
+        document.body.style.background = ACTIVE_BG; /* 保持一致背景 */
+        phaseLabel.innerText = 'Relax';
+    } else {
+        document.body.style.background = 'linear-gradient(120deg, #1e1e2f, #111)';
+        phaseLabel.innerText = 'Settings';
+    }
+}
+
+function flash(color, times=3) {
     let count = 0;
-    const interval = setInterval(()=>{
-        document.body.style.background = count%2===0 ? color : 'linear-gradient(120deg,#1e1e2f,#111)';
+    const interval = setInterval(() => {
+        document.body.style.background = (count % 2 === 0) ? color : ACTIVE_BG;
         count++;
-        if(count >= times*2){ 
-            clearInterval(interval); 
-            document.body.style.background='linear-gradient(120deg,#1e1e2f,#111)'; 
+        if (count >= times * 2) {
+            clearInterval(interval);
+            applyPhaseBackground();
         }
     }, 400);
 }
 
-// 播放提示音
-function playAlert(){
+function playAlert() {
     const audio = new Audio('alert.mp3');
     audio.play();
 }
 
-function startTimer(){
-    focusTime = parseInt(document.getElementById('focusMin').value)*60;
-    restTime = parseInt(document.getElementById('restMin').value)*60;
-    totalTime = parseInt(document.getElementById('totalMin').value)*60;
+function startTimer() {
+    const fMin = parseInt(document.getElementById('focusMin').value)||0;
+    const fSec = parseInt(document.getElementById('focusSec').value)||0;
+    const rMin = parseInt(document.getElementById('restMin').value)||0;
+    const rSec = parseInt(document.getElementById('restSec').value)||0;
+    const tMin = parseInt(document.getElementById('totalMin').value)||0;
+    const tSec = parseInt(document.getElementById('totalSec').value)||0;
 
-    // 保存当前周期数值
-    currentFocus = focusTime/60;
-    currentRest = restTime/60;
-    currentTotal = totalTime/60;
+    focusTime = fMin*60 + fSec;
+    restTime  = rMin*60 + rSec;
+    totalTime = tMin*60 + tSec;
 
-    remaining = focusTime;
+    if (focusTime<=0 || restTime<=0 || totalTime<=0) {
+        alert('专注、放松和总周期时间都需要大于 0 秒');
+        return;
+    }
+
+    remaining      = focusTime;
     totalRemaining = totalTime;
-    state='focus';
-    paused=false;
-    timerRunning=true;
+    state          = 'focus';
+    paused         = false;
+    timerRunning   = true;
 
-    settingsDiv.style.display='none';
-    closeBtn.style.display='none';
+    timeDiv.style.fontSize = '56px';
+    adjustTimeLayout();
 
+    settingsDiv.style.display = 'none';
+    closeBtn.style.display    = 'none';
+
+    applyPhaseBackground();
     updateDisplay();
 
-    if(timer) clearInterval(timer);
+    if (timer) clearInterval(timer);
 
-    timer = setInterval(()=>{
-        if(paused) return;
+    timer = setInterval(() => {
+        if (paused) return;
 
         remaining--;
         totalRemaining--;
         updateDisplay();
 
-        if(remaining <= 0){
-            if(state==='focus'){ 
-                state='rest'; 
-                remaining = restTime; 
-                flash('#2ecc71',3); 
-                playAlert(); 
-            } else { 
-                state='focus'; 
-                remaining = focusTime; 
-                flash('#3498db',3); 
-                playAlert(); 
+        if (remaining <= 0) {
+            if (state === 'focus') {
+                state     = 'rest';
+                remaining = restTime;
+                applyPhaseBackground();
+                flash('#2ecc71',3);
+                playAlert();
+            } else {
+                state     = 'focus';
+                remaining = focusTime;
+                applyPhaseBackground();
+                flash('#3498db',3);
+                playAlert();
             }
         }
 
-        if(totalRemaining <= 0){
+        if (totalRemaining <= 0) {
             clearInterval(timer);
-            timerRunning = false;
-            state='focus';
-            remaining=0;
-            totalRemaining=0;
+            timerRunning   = false;
+            state          = 'idle';
+            remaining      = 0;
+            totalRemaining = 0;
             updateDisplay();
-            flash('#f39c12',3); 
-            playAlert(); 
-            settingsDiv.style.display='flex';
-            closeBtn.style.display='inline';
+            applyPhaseBackground();
+            flash('#f39c12',3);
+            playAlert();
+            settingsDiv.style.display = 'flex';
+            closeBtn.style.display    = 'inline';
         }
     },1000);
 }
 
 window.onload = () => {
     startBtn.onclick = startTimer;
-    settingsDiv.style.display='flex';
+    settingsDiv.style.display = 'flex';
+    applyPhaseBackground();
+    adjustTimeLayout();
 };
+
+window.onresize = adjustTimeLayout;
 </script>
 </body>
 </html>
